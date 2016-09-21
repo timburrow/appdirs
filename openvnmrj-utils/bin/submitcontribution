@@ -44,11 +44,9 @@ Options
     -u
       Github user name, *required* (your username on GitHub)
     -v
-    	Verbose TODO does nothing yet
+    	Verbose
     -H
-      Use https URL. The default is ssh, which requires ssh keys.
-    -U
-    	Update existing application directory. See below.
+      Use https URL. The default is ssh, which requires ssh keys. https will not work with 2FA
       
 License
 =======
@@ -81,10 +79,10 @@ If you used a branch other than development, specify it using the -b switch.
 
 Updating
 ========
-If an application directory with the same name already exists, this script will exit
-unless the U flag is given to update the application directory.
+If an application directory with the same name already exists, this script will
+update the repository.
 
-Update the tag to indicate a new version, for example -t 1.1
+Please update the tag to indicate a new version, for example -t 1.1
 
 Submitting
 ==========
@@ -107,16 +105,12 @@ mysub----maclib--macro files
 .......|-bin--executables
 .......|-templates--UX xml files
 .......|-data--test data (FIDs)
-.......|-LICENSE (Apachev2 for inclusion into OpenVnmrJ)
-.......|-description (multiple lines with description of your appdir)
-.......|-title (single line with a human readable name)
+.......|-LICENSE--(Apachev2 for inclusion into OpenVnmrJ)
+.......|-description--(multiple lines with description of your appdir)
+.......|-title--(single line with a human readable name)
 
 In this example, run the script like:
-<<<<<<< HEAD
-./submitcontribution -p pathto/mysub -name mysub -u your-github-name
-=======
 ./submitcontribution -p pathto/mysub -u your-github-name
->>>>>>> master
 
 This script will clone your fork from GitHub, check your files, then add them to the repository.
 Finally, the repository will be pushed back to GitHub using your credentials.
@@ -186,7 +180,9 @@ Check that the URL above is correct and you have correct permissions.
 If the URL starts with ssh, check this website:
 https://help.github.com/articles/generating-ssh-keys/ 
 
-Try using the -H option and an https URL?
+To submit an appdir, you must first submit to your fork, not to OpenVnmrJ
+then make a pull request to the OpenVnmrJ repository.
+
 %%
 }
 
@@ -206,13 +202,15 @@ checkifgit() {
   fi
 
   cd "${1}"/
-
+  if (( $verbose == 1 )); then
+    echo -e "Move to ${curdir}\n"
+  fi
   if [[ $(git rev-parse --is-inside-work-tree 2>/dev/null) == "true" ]]; then
     # we are inside a git repository; perhaps an appdir clone?
     # TODO check if a fork of appdirs, if so push?
     # For now ignore and just work independently, but DO NOT COPY .git!
     if (( $verbose == 1 )); then
-      echo "Directory under git control"
+      echo "Directory ${1} is under git control"
       remotegit=$(git config --get remote.origin.url 2> /dev/null&)
       echo "Checking"
       if [[ -z ${remotegit:-} ]]; then
@@ -220,6 +218,10 @@ checkifgit() {
       else
         echo "Remote is ${remotegit}"
       fi
+    fi
+  else
+    if (( $verbose == 1 )); then
+      echo "Directory ${1} NOT under git control"
     fi
   fi
   cd "${curdir}"
@@ -232,13 +234,11 @@ docopy() {
   local src=${1}
   local dest=${2}
   local reponame=${3}
-  local update=${4}
 
 # first check if dest already exists
   if [[ -d "${dest}/${reponame}" ]]; then
-    if (( ${update} == 0 )); then
-      echo "Directory with name ${reponame} already exists! Use -U to update"
-      exit 1
+    if (( $verbose == 1 )); then
+      echo "Directory with name ${reponame} already exists: Updating. Please use a new tag"
     fi
       # update using rsync (no / at end of src!)
     if (( $verbose == 1 )); then
@@ -264,7 +264,6 @@ version="1.0"
 useHTTPS=0
 localbranchmade=0
 verbose=0
-update=0
 repo="appdirs"
 localbranch="development"
 
@@ -276,7 +275,7 @@ fi
 
 if [[ $? != 0 ]] ; then showhelp; exit 1 ; fi
 
-while getopts “b:r:p:u:vhHt:U” option; do
+while getopts “b:r:p:u:vhHt:” option; do
   case "$option" in
     b)
       # branch to use, if not specified, uses development
@@ -306,10 +305,6 @@ while getopts “b:r:p:u:vhHt:U” option; do
       # use https URL. The default is ssh.
       useHTTPS=1
       ;;
-    U)
-      # Update existing appdir
-      update=1
-      ;;
     v)
       verbose=1
       ;;     
@@ -329,17 +324,15 @@ if [[ -z ${gitusername:-} || -z ${gitemail:-} ]]; then
   exit 1
 fi
 
-# check inputs are good
-if [[ -z ${githubuser:-} ]]; then
-  githubuser=$gitusername
-fi
-
 if [[ -z ${githubuser:-} ]]; then
   echo -e "Missing -u GITHUBUSER!\n"
   showhelp
   exit 85
 fi
-echo "githubuser: ${githubuser}"
+
+if (( $verbose == 1 )); then
+  echo "Using githubuser: ${githubuser}"
+fi
 
 if [[ -z ${dirpath:-} ]]; then
   echo -e "Missing -p path to directory!\n"
@@ -360,7 +353,8 @@ repos=($(curl -s "$API_URL" | grep -Eo '"git_url": "[^"]+"' | awk '{print $2}' |
 contains "${repo}" "${repos[@]}" || { echo -e "Cannot find ${repo} in list\n${repos[@]}"; showhelp ; exit 1; }
 
 if [[ "OpenVnmrJ" ==  $githubuser ]]; then
-  echo "Please fork the OpenVnmrJ repository on GitHub"
+  echo -e "Please fork the OpenVnmrJ repository on GitHub\n"
+  showhelp
   exit 1
 fi
 
@@ -409,12 +403,15 @@ fi
 
 # Clone the forked appdir in a new (hidden directory) in ovjhome
 repodir="${ovjhome}/.${repo}-${localbranch}"
+
 if [[ -d "${repodir}" ]]; then
+  echo "DELETING existing ${repodir}"
 	rm -rf "${repodir}"
 fi
 
 if (( $verbose == 1 )); then
   echo "Cloning repository from ${repo_url} into ${repodir}"
+  echo "git clone ${repo_url} ${repodir} "
 fi
 git clone ${repo_url} ${repodir} || { badrepo "${repo_url}"; exit 1; }
 cd "${repodir}"/
@@ -425,12 +422,13 @@ git fetch --tags
 if (( $verbose == 1 )); then
   echo "In $(pwd) with git show-ref --verify refs/heads/${localbranch}"
 fi
-git show-ref --verify refs/heads/"${localbranch}" 2> /dev/null
+git show-ref --verify --quiet refs/heads/"${localbranch}"
 if [[ $? != 0 ]]; then
   if (( $verbose == 1 )); then
     echo "checking out new branch ${localbranch}"
   fi
   git checkout -b ${localbranch} || { echo "Making branch ${localbranch} failed. Aborting"; exit 1; }
+  git pull origin ${localbranch}
   localbranchmade=1
 else
 	git checkout  ${localbranch} || { echo "Checking out branch ${localbranch} failed. Aborting"; exit 1; }
@@ -447,21 +445,21 @@ fi
 
 # We're in the repo now, so must have a path back to the submitted directory
 # docopy "${curdir}/${dirpath}" "${repodir}" "${reponame}" ${update}
-docopy "${dirpath}" "${repodir}" "${reponame}" ${update}
+docopy "${dirpath}" "${repodir}" "${reponame}"
 
 # sign our commit and tag if possible
 gitsignkey=$(git config --global --get user.signingkey)
 if [[ -z ${gitsignkey} ]]; then
   tagswitch="-a"
-  commitswitch="-m"
+  commitswitch="-a "
 else
-  tagswitch="-a" # -s for pgp
-  commitswitch="-m" # -S -m for pgp
+  tagswitch="-s" # -s for pgp
+  commitswitch="-S -a " # -S -m for pgp
 fi
 title=$(cat "${dirpath}/title")
 description=$(cat "${dirpath}/description")
 
-if [[ README.md ]]; then
+if [[ -f "${dirpath}/README.md" ]]; then
 	cat  >> README.md <<-%
 ## ${title}
 *Version ${version} submitted by ${githubuser}*
@@ -478,7 +476,7 @@ if (( $verbose == 1 )); then
   echo -e "git commit ${commitswitch} ${reponame} -m ${title}\n"
 fi
 
-git commit ${commitswitch} "${reponame}" -m "${title}"  || { echo "git commit could not be made. Please look at the error message"; exit 1; }
+git commit ${commitswitch}  -m "${reponame} ${title} ${version}"  || { echo "git commit could not be made. Please look at the error message"; exit 1; }
 
 git tag ${tagswitch} "${reponame}-${version}" -m "${description}"
 

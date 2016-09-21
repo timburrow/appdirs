@@ -209,7 +209,8 @@ if [[ -d "${repodir}"/.git ]]; then
   fi
 # repo exists already, just update
   cd "${repodir}" || { echo "cd ${repodir} failed. Aborting"; exit 1; }
-  echo "Updating repository from ${repo_url}"
+  echo "Updating repository from origin"
+  git remote -v
   git show-ref --verify --quiet refs/heads/"${localbranch}"
   if [[ $? == 0 ]]; then
     git pull origin ${localbranch} || { git pull origin master; }
@@ -244,6 +245,8 @@ else # make directory if necessary and clone
   git fetch --tags
   if [[ ! -z ${localbranch} ]]; then
     git checkout -b ${localbranch} || { echo "error in making new branch ${localbranch}"; exit 1; }
+    #git branch --set-upstream-to=origin/${localbranch} ${localbranch} || { echo "error in tracking  branch ${localbranch}"; exit 1; }
+    git branch --set-upstream ${localbranch} origin/${localbranch}  || { echo "error in tracking  branch ${localbranch}"; exit 1; }
   fi
 fi
 # at this point we have a repo in "${repodir}" and on the correct branch
@@ -252,13 +255,17 @@ cd "${repodir}"
 appdirs=$(find . -maxdepth 1 -type d -exec basename {} \; | grep -v "^\.")
 
 # Let's add the openvnmrj-utils appdir to the Application Directories
-#appdirfile="${vnmruser}/persistence/appdir_${USER}"
-#utildir="${ovjhome}/${repo}/openvnmrj-utils"
-#appdiradded=$(grep openvnmrj-utils "${appdirfile}")
-#if [[ -z ${appdiradded} && -d "${utildir}" ]]; then
-#    title=$(head -1 "${utildir}/title")
-#    echo "1;${ovjhome}/appdirs/openvnmrj-utils;${title}" >> "${appdirfile}"
-#fi
+appdirfile="${vnmruser}/persistence/appdir_${USER}"
+appmode="Spectroscopy"
+if [[ ! -f "${appdirfile}" ]]; then
+  cp "${vnmrsystem}/adm/users/userProfiles/appdir${appmode}.txt" "${appdirfile}"
+fi
+utildir="${ovjhome}/${repo}/openvnmrj-utils"
+appdiradded=$(grep openvnmrj-utils "${appdirfile}")
+if [[ -z ${appdiradded} && -d "${utildir}" ]]; then
+    title=$(head -1 "${utildir}/title")
+    echo "1;${ovjhome}/appdirs/openvnmrj-utils;${title}" >> "${appdirfile}"
+fi
 
 # copy license file (required for ovjsubmit)
 cp "${ovjhome}/${repo}/LICENSE" "${ovjhome}/"
@@ -294,7 +301,7 @@ done
 if (( $verbose == 1 )); then
   echo -e "\n${underline}\n"
   cat <<-%
-The contributions of the repository are listed above with title and descripton.
+The contributions of the repository are listed above with title and description.
 
 To access any contribution, enable the contribution within OpenVnmrJ by 
 selecting "edit>Applications…"
