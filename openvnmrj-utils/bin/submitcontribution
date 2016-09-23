@@ -266,6 +266,7 @@ localbranchmade=0
 verbose=0
 repo="appdirs"
 localbranch="development"
+quiet="--quiet"
 
 if [[ ! -z ${vnmruser:-} ]]; then
   ovjhome=${vnmruser}/openvnmrj
@@ -307,6 +308,8 @@ while getopts “b:r:p:u:vhHt:” option; do
       ;;
     v)
       verbose=1
+      quiet=""
+      echo -e "Verbose output turned on"
       ;;     
     /?) 
     	echo -e "Invalid option: ${option}\n" 1>&2
@@ -405,7 +408,9 @@ fi
 repodir="${ovjhome}/.${repo}-${localbranch}"
 
 if [[ -d "${repodir}" ]]; then
-  echo "DELETING existing ${repodir}"
+  if (( verbose ==1 )); then
+    echo "DELETING existing ${repodir}"
+  fi
 	rm -rf "${repodir}"
 fi
 
@@ -413,10 +418,10 @@ if (( $verbose == 1 )); then
   echo "Cloning repository from ${repo_url} into ${repodir}"
   echo "git clone ${repo_url} ${repodir} "
 fi
-git clone ${repo_url} ${repodir} || { badrepo "${repo_url}"; exit 1; }
+git clone ${quiet} ${repo_url} ${repodir} >/dev/null 2>&1 || { badrepo "${repo_url}"; exit 1; }
 cd "${repodir}"/
-git fetch --all
-git fetch --tags
+git fetch --all >/dev/null 2>&1
+git fetch --tags >/dev/null 2>&1
 
 # check if the branch aready exists
 if (( $verbose == 1 )); then
@@ -427,11 +432,11 @@ if [[ $? != 0 ]]; then
   if (( $verbose == 1 )); then
     echo "checking out new branch ${localbranch}"
   fi
-  git checkout -b ${localbranch} || { echo "Making branch ${localbranch} failed. Aborting"; exit 1; }
-  git pull origin ${localbranch}
+  git checkout ${quiet} -b ${localbranch} >/dev/null 2>&1 || { echo "Making branch ${localbranch} failed. Aborting"; exit 1; }
+  git pull origin ${localbranch} >/dev/null 2>&1
   localbranchmade=1
 else
-	git checkout  ${localbranch} || { echo "Checking out branch ${localbranch} failed. Aborting"; exit 1; }
+	git checkout  ${localbranch} >/dev/null 2>&1 || { echo "Checking out branch ${localbranch} failed. Aborting"; exit 1; }
 	localbranchmade=0 
 fi
 
@@ -476,20 +481,23 @@ if (( $verbose == 1 )); then
   echo -e "git commit ${commitswitch} ${reponame} -m ${title}\n"
 fi
 
-git commit ${commitswitch}  -m "${reponame} ${title} ${version}"  || { echo "git commit could not be made. Please look at the error message"; exit 1; }
+git commit ${commitswitch} ${quiet} -m "${reponame} ${title} ${version}"  >/dev/null || { echo "git commit could not be made. Please look at the error message"; exit 1; }
 
 git tag ${tagswitch} "${reponame}-${version}" -m "${description}"
 
 if (( $localbranchmade == 1 )); then
   if (( $verbose == 1 )); then
     echo "git push --set-upstream origin ${localbranch}"
-  fi
-  git push --set-upstream origin ${localbranch} \
+    git push --set-upstream origin ${localbranch} \
+      || { echo "git push branch could not be made. Please look at the error message"; exit 1; }
+  else
+    git push --set-upstream origin ${localbranch} >/dev/null \
         || { echo "git push branch could not be made. Please look at the error message"; exit 1; }
+  fi
 fi
 
-git push || { echo "git push could not be made. Please look at the error message"; exit 1; } 
-git push --tags
+git push ${quiet} >/dev/null || { echo "git push could not be made. Please look at the error message"; exit 1; }
+git push --tags ${quiet} >/dev/null
 
 cat<<-%
 
